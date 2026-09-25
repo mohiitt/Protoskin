@@ -1,0 +1,20 @@
+{
+  "laptop_13": {
+    "label": "13-inch Laptop Shell",
+    "product_type": "13-inch laptop top shell",
+    "estimated_shell_volume_cm3": 82,
+    "baseline_material": "recycled_aluminum"
+  },
+  "laptop_15": {
+    "label": "15-inch Laptop Shell",
+    "product_type": "15-inch laptop top shell",
+    "estimated_shell_volume_cm3": 110,
+    "baseline_material": "recycled_aluminum"
+  },
+  "printer_compact": {
+    "label": "Compact Printer Shell",
+    "product_type": "compact printer exterior shell",
+    "estimated_shell_volume_cm3": 240,
+    "baseline_material": "standard_abs"
+  }
+}

@@ -1,0 +1,97 @@
+{
+  "recycled_aluminum": {
+    "label": "Recycled Aluminum",
+    "visual": {
+      "appearance": "brushed recycled aluminum with a cool silver grain",
+      "finish": "satin",
+      "reflectivity": "medium",
+      "texture": "fine",
+      "prompt": "brushed recycled aluminum, cool silver grain",
+      "negative_prompt": ""
+    },
+    "analytical": {
+      "density_kg_m3": 2700,
+      "raw_material_cost_usd_per_kg": 3.1,
+      "thermal_conductivity_w_mk": 160,
+      "recycled_content_percent": 75,
+      "notes": "Screening baseline for a metal laptop shell.",
+      "assumption_note": "Hackathon screening dataset; not a supplier quote."
+    }
+  },
+  "ocean_bound_polymer": {
+    "label": "Ocean-Bound Recycled Polymer",
+    "visual": {
+      "appearance": "fine recycled speckling, dark graphite polymer",
+      "finish": "matte",
+      "reflectivity": "low",
+      "texture": "fine",
+      "prompt": "ocean-bound recycled polymer, fine graphite speckling, matte",
+      "negative_prompt": ""
+    },
+    "analytical": {
+      "density_kg_m3": 1150,
+      "raw_material_cost_usd_per_kg": 2.4,
+      "thermal_conductivity_w_mk": 0.25,
+      "recycled_content_percent": 70,
+      "notes": "Much lower conductivity than aluminum; a thermal path may need a separate look.",
+      "assumption_note": "Hackathon screening dataset; not a supplier quote."
+    }
+  },
+  "recycled_magnesium": {
+    "label": "Recycled Magnesium Alloy",
+    "visual": {
+      "appearance": "light warm-gray magnesium with a soft metallic sheen",
+      "finish": "satin",
+      "reflectivity": "medium",
+      "texture": "fine",
+      "prompt": "recycled magnesium alloy, light warm gray, soft metallic sheen",
+      "negative_prompt": ""
+    },
+    "analytical": {
+      "density_kg_m3": 1740,
+      "raw_material_cost_usd_per_kg": 4.5,
+      "thermal_conductivity_w_mk": 80,
+      "recycled_content_percent": 50,
+      "notes": "Lighter than aluminum in this dataset, with lower conductivity.",
+      "assumption_note": "Hackathon screening dataset; not a supplier quote."
+    }
+  },
+  "recycled_fiber_composite": {
+    "label": "Molded Recycled Fiber Composite",
+    "visual": {
+      "appearance": "molded fiber composite with a visible fine weave",
+      "finish": "matte",
+      "reflectivity": "low",
+      "texture": "medium",
+      "prompt": "molded recycled fiber composite, visible fine weave, matte",
+      "negative_prompt": ""
+    },
+    "analytical": {
+      "density_kg_m3": 1350,
+      "raw_material_cost_usd_per_kg": 3.8,
+      "thermal_conductivity_w_mk": 0.4,
+      "recycled_content_percent": 60,
+      "notes": "Appearance is weave-driven; conductivity stays in the polymer range.",
+      "assumption_note": "Hackathon screening dataset; not a supplier quote."
+    }
+  },
+  "standard_abs": {
+    "label": "Standard ABS",
+    "visual": {
+      "appearance": "smooth injection-molded ABS, uniform charcoal",
+      "finish": "semi-gloss",
+      "reflectivity": "medium",
+      "texture": "fine",
+      "prompt": "standard ABS plastic, smooth charcoal, injection-molded",
+      "negative_prompt": ""
+    },
+    "analytical": {
+      "density_kg_m3": 1050,
+      "raw_material_cost_usd_per_kg": 1.8,
+      "thermal_conductivity_w_mk": 0.18,
+      "recycled_content_percent": 0,
+      "notes": "Conventional plastic baseline with no recycled content in this dataset.",
+      "assumption_note": "Hackathon screening dataset; not a supplier quote."
+    }
+  }
+}

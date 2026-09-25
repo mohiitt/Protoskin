@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ProtoSkin</title>
+  <style>
+    :root { color-scheme: light; }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: #f3f0ea;
+      color: #1c1b19;
+      font: 15px/1.45 "Avenir Next", "Segoe UI", sans-serif;
+    }
+    header, main, footer { width: min(1100px, calc(100% - 32px)); margin: 0 auto; }
+    header { display: flex; justify-content: space-between; gap: 16px; align-items: baseline; padding: 28px 0 12px; }
+    h1 { font-size: 22px; font-weight: 600; margin: 0; letter-spacing: -0.02em; }
+    .badge { font-size: 13px; color: #3d4f48; }
+    main { display: grid; grid-template-columns: 320px 1fr; gap: 20px; padding-bottom: 28px; }
+    form, .results, .panel { background: #fff; border: 1px solid #e4dfd6; border-radius: 12px; padding: 16px; }
+    label { display: block; font-size: 12px; margin: 12px 0 4px; color: #5c584f; }
+    input, select, textarea, button { width: 100%; font: inherit; }
+    input, select, textarea { border: 1px solid #d9d3c7; border-radius: 8px; padding: 8px; background: #fff; }
+    textarea { min-height: 72px; resize: vertical; }
+    button { margin-top: 16px; background: #1c1b19; color: #fff; border: 0; border-radius: 8px; padding: 10px; cursor: pointer; }
+    button:disabled { opacity: 0.5; cursor: default; }
+    .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .status { min-height: 1.2em; font-size: 13px; margin-top: 8px; }
+    .error { color: #8a2b2b; }
+    .shots { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    figure { margin: 0; }
+    figcaption { font-size: 12px; color: #5c584f; margin-bottom: 6px; }
+    img { width: 100%; background: #f7f5f1; border-radius: 8px; }
+    table { width: 100%; border-collapse: collapse; margin-top: 16px; font-size: 14px; }
+    th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid #eee8df; vertical-align: top; }
+    th { font-size: 12px; color: #5c584f; font-weight: 600; }
+    .note { font-size: 13px; color: #5c584f; }
+    ul { margin: 8px 0 0; padding-left: 18px; }
+    footer { font-size: 13px; color: #5c584f; padding-bottom: 32px; }
+    @media (max-width: 800px) {
+      main, .shots { grid-template-columns: 1fr; }
+      header { flex-direction: column; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>ProtoSkin</h1>
+    <div class="badge">AI inference: HP ZGX Nano · Cloud AI calls: 0</div>
+  </header>
+  <main>
+    <form id="studio">
+      <label for="image">Product sketch</label>
+      <input id="image" name="image" type="file" accept="image/*" required>
+      <label for="profile">Product profile</label>
+      <select id="profile" name="product_profile_id" required></select>
+      <label for="control">Input type</label>
+      <select id="control" name="control_mode"></select>
+      <div class="row">
+        <div>
+          <label for="baseline">Baseline</label>
+          <select id="baseline" name="baseline_material_id" required></select>
+        </div>
+        <div>
+          <label for="candidate">Candidate</label>
+          <select id="candidate" name="candidate_material_id" required></select>
+        </div>
+      </div>
+      <div class="row">
+        <div>
+          <label for="finish">Finish</label>
+          <select id="finish" name="finish"></select>
+        </div>
+        <div>
+          <label for="texture">Texture</label>
+          <select id="texture" name="texture"></select>
+        </div>
+      </div>
+      <label for="color">Color</label>
+      <select id="color" name="color"></select>
+      <label for="prompt">Optional visual prompt</label>
+      <textarea id="prompt" name="visual_prompt" placeholder="Fine recycled speckling, premium matte finish"></textarea>
+      <input type="hidden" name="seed" value="42">
+      <button id="go" type="submit" disabled>Generate Concept</button>
+      <div id="status" class="status"></div>
+    </form>
+    <section class="results" id="results" hidden>
+      <div class="shots">
+        <figure>
+          <figcaption>Original input</figcaption>
+          <img id="original" alt="Uploaded product sketch">
+        </figure>
+        <figure>
+          <figcaption>Material concept <span id="placeholder" class="note"></span></figcaption>
+          <img id="concept" alt="Generated material concept">
+          <p id="visual-error" class="error"></p>
+        </figure>
+      </div>
+      <table>
+        <thead>
+          <tr><th>Metric</th><th id="base-head">Baseline</th><th id="cand-head">Candidate</th></tr>
+        </thead>
+        <tbody id="metrics"></tbody>
+      </table>
+      <h2>Explanation</h2>
+      <p id="summary"></p>
+      <ul id="tradeoffs"></ul>
+      <p id="assumptions" class="note"></p>
+    </section>
+  </main>
+  <footer id="disclaimer">Concept-stage screening estimate. Not a manufacturing quote, BOM estimate, structural simulation, or thermal validation.</footer>
+  <script>
+    const form = document.querySelector("#studio");
+    const status = document.querySelector("#status");
+    const results = document.querySelector("#results");
+    let profiles = [];
+
+    function fill(select, items, selected) {
+      select.innerHTML = "";
+      for (const item of items) {
+        const option = document.createElement("option");
+        const value = typeof item === "string" ? item : item.id;
+        option.value = value;
+        option.textContent = typeof item === "string" ? item : item.label;
+        if (value === selected) option.selected = true;
+        select.appendChild(option);
+      }
+    }
+
+    function applyProfileDefault() {
+      const profile = profiles.find((item) => item.id === form.product_profile_id.value);
+      if (profile) form.baseline_material_id.value = profile.baseline_material;
+    }
+
+    fetch("/api/options")
+      .then((res) => res.json())
+      .then((data) => {
+        profiles = data.profiles;
+        fill(form.product_profile_id, data.profiles, "laptop_13");
+        fill(form.control_mode, data.control_modes, "canny");
+        fill(form.baseline_material_id, data.materials, "recycled_aluminum");
+        fill(form.candidate_material_id, data.materials, "ocean_bound_polymer");
+        fill(form.finish, data.finishes, "matte");
+        fill(form.texture, data.textures, "fine");
+        fill(form.color, data.colors, "graphite");
+        document.querySelector("#disclaimer").textContent = data.disclaimer;
+        form.product_profile_id.addEventListener("change", applyProfileDefault);
+        form.querySelector("#go").disabled = false;
+      })
+      .catch(() => { status.textContent = "Could not load shared options."; status.className = "status error"; });
+
+    function cell(text) {
+      const td = document.createElement("td");
+      td.textContent = text;
+      return td;
+    }
+
+    function row(metric, baseline, candidate) {
+      const tr = document.createElement("tr");
+      tr.append(cell(metric), cell(baseline), cell(candidate));
+      return tr;
+    }
+
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      status.className = "status";
+      status.textContent = "Running locally…";
+      const file = form.image.files[0];
+      document.querySelector("#original").src = URL.createObjectURL(file);
+      const response = await fetch("/api/concept", { method: "POST", body: new FormData(form) });
+      const body = await response.json();
+      if (!response.ok) {
+        status.textContent = typeof body.detail === "string" ? body.detail : "Request failed";
+        status.className = "status error";
+        return;
+      }
+      const materials = body.materials;
+      document.querySelector("#base-head").textContent = materials.baseline_label;
+      document.querySelector("#cand-head").textContent = materials.candidate_label;
+      const metrics = document.querySelector("#metrics");
+      metrics.replaceChildren(
+        row("Estimated shell mass", `${materials.baseline_mass_g} g`, `${materials.candidate_mass_g} g`),
+        row("Relative mass", "—", `${materials.mass_delta_percent}%`),
+        row("Raw material estimate", `$${materials.baseline_raw_material_cost_usd.toFixed(2)}`, `$${materials.candidate_raw_material_cost_usd.toFixed(2)}`),
+        row("Raw material delta", "—", `${materials.raw_material_cost_delta_usd >= 0 ? "+" : "−"}$${Math.abs(materials.raw_material_cost_delta_usd).toFixed(2)}`),
+        row("Thermal conductivity", `${materials.baseline_thermal_conductivity_w_mk} W/m·K`, `${materials.candidate_thermal_conductivity_w_mk} W/m·K`),
+        row("Recycled content", `${materials.baseline_recycled_content_percent}%`, `${materials.recycled_content_percent}%`)
+      );
+      const concept = document.querySelector("#concept");
+      const visualError = document.querySelector("#visual-error");
+      if (body.visual.status === "success" && body.visual.image_url) {
+        concept.hidden = false;
+        concept.src = body.visual.image_url;
+        visualError.textContent = "";
+      } else {
+        concept.hidden = true;
+        visualError.textContent = body.visual.error || "Image generation failed. Material screening is still shown.";
+      }
+      document.querySelector("#placeholder").textContent = body.visual.placeholder ? "· placeholder until the visual engine is connected" : "";
+      document.querySelector("#summary").textContent = body.explanation.summary;
+      const tradeoffs = document.querySelector("#tradeoffs");
+      tradeoffs.replaceChildren();
+      for (const item of body.explanation.tradeoffs) {
+        const li = document.createElement("li");
+        li.textContent = item;
+        tradeoffs.appendChild(li);
+      }
+      document.querySelector("#assumptions").textContent = body.materials.assumptions.join(" ");
+      document.querySelector("#disclaimer").textContent = body.disclaimer;
+      results.hidden = false;
+      status.textContent = `Done in ${body.visual.generation_time_s}s · seed ${body.visual.seed ?? "—"} · explanation: ${body.explanation.source}`;
+    });
+  </script>
+</body>
+</html>

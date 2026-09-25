@@ -1,0 +1,9 @@
+# Install on the ZGX Nano when connecting real models. Not needed for the mock studio.
+torch
+diffusers
+transformers
+accelerate
+safetensors
+huggingface_hub
+opencv-python
+Pillow

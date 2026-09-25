@@ -1,0 +1,11 @@
+.rocketride/
+.env
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+models/
+demo_outputs/*
+!demo_outputs/.gitkeep
+!demo_outputs/verified_examples/
+!demo_outputs/verified_examples/.gitkeep

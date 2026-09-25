@@ -17,6 +17,40 @@ Designed for the **HP ZGX Nano GB10**, ProtoSkin keeps sensitive product concept
 
 > ProtoSkin is a concept-visualization and early material-screening tool, not an engineering simulation or CAD validation system.
 
+## Run the boilerplate
+
+From the repo root:
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+python scripts/smoke_test.py
+uvicorn gateway_and_ui.backend.main:app --reload
+```
+
+Open http://127.0.0.1:8000. Image generation is a placeholder copy of the upload. Material numbers come from the shared config. No model download is required for this flow.
+
+On the ZGX Nano, when you are ready to connect real models:
+
+```bash
+pip install -r requirements-ml.txt
+bash scripts/download_models.sh
+```
+
+### Who edits what
+
+| Folder | Owner | Frozen entry point |
+|---|---|---|
+| `visual_engine/` | Person A | `generate_concept(...)` |
+| `material_intelligence/` | Person B | `compare_materials(...)`, `explain_result(...)` |
+| `gateway_and_ui/` | Person C | FastAPI and `frontend/` |
+| `shared/` | whole team | change only together |
+
+Do not change those signatures or the fields in `shared/schemas.py` without agreeing first. The gateway imports `mock_visual.generate_concept`, which currently calls the placeholder pipeline. At integration, point that import at the real SDXL pipeline.
+
+Suggested branches: `feature/visual-engine`, `feature/material-intelligence`, `feature/ui-gateway`.
+
 ## Architecture
 
 ```text
@@ -136,7 +170,7 @@ protoskin/
 |-- visual_engine/
 |   `-- SDXL + ControlNet pipeline
 |
-|-- material_engine/
+|-- material_intelligence/
 |   |-- deterministic calculations
 |   `-- local LLM explanation
 |
