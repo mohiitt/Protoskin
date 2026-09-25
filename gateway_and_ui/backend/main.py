@@ -1,5 +1,8 @@
 """ProtoSkin gateway. Sequential: materials, then image, then explanation."""
 
+import logging
+import os
+import threading
 import uuid
 from pathlib import Path
 
@@ -22,10 +25,48 @@ from shared.config import (
 )
 from shared.schemas import ConceptResponse, VisualResult
 
+logger = logging.getLogger("gateway_and_ui.backend.main")
+
 app = FastAPI(title="ProtoSkin", version="0.1.0")
 
 DEMO_OUTPUTS.mkdir(parents=True, exist_ok=True)
 app.mount("/outputs", StaticFiles(directory=DEMO_OUTPUTS), name="outputs")
+
+# Set PROTOSKIN_SKIP_WARMUP=1 to skip loading real models at startup, e.g.
+# for fast local iteration on the gateway/UI without a GPU or model weights.
+_SKIP_WARMUP = os.environ.get("PROTOSKIN_SKIP_WARMUP") == "1"
+
+
+@app.on_event("startup")
+def _warm_up_models() -> None:
+    """Pre-load SDXL/ControlNet and the local LLM so the first live demo
+    request doesn't pay model-load latency in front of an audience (plan
+    section 7, "warm the model before the demo"). Runs in a background
+    thread so the server starts accepting requests immediately; a request
+    that arrives before warm-up finishes just loads on demand instead.
+    """
+    if _SKIP_WARMUP:
+        logger.info("PROTOSKIN_SKIP_WARMUP=1 set; skipping model warm-up")
+        return
+
+    def _run():
+        from material_intelligence.llm_explainer import warm_up as warm_up_llm
+        from visual_engine.pipeline import warm_up as warm_up_visual
+
+        try:
+            logger.info("Warming up visual engine (SDXL + ControlNet-Canny)...")
+            warm_up_visual()
+            logger.info("Visual engine warm.")
+        except Exception:
+            logger.exception("Visual engine warm-up failed; will load on first request instead.")
+        try:
+            logger.info("Warming up local LLM (Qwen3-8B)...")
+            warm_up_llm()
+            logger.info("Local LLM warm.")
+        except Exception:
+            logger.exception("LLM warm-up failed; explanations will use the template fallback.")
+
+    threading.Thread(target=_run, name="protoskin-warmup", daemon=True).start()
 
 
 @app.get("/api/health")
