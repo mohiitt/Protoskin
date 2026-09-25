@@ -51,8 +51,23 @@ class ExplanationResult(BaseModel):
     error: str | None = None
 
 
+class Reconstruction3DResult(BaseModel):
+    """Best-effort orbit-able 3D preview, reconstructed from the generated
+    concept image via Stable Fast 3D. Additive and non-blocking: a failure
+    here never prevents the 2D image + material report from returning
+    successfully (mirrors VisualResult's own error-status contract).
+    """
+
+    glb_path: str | None = None
+    glb_url: str | None = None
+    reconstruction_time_s: float = 0
+    status: Literal["success", "error"] = "success"
+    error: str | None = None
+
+
 class ConceptResponse(BaseModel):
     visual: VisualResult
     materials: MaterialComparison
     explanation: ExplanationResult
+    reconstruction: Reconstruction3DResult
     disclaimer: str

@@ -4,6 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>ProtoSkin</title>
+  <script type="module" src="/static/model-viewer.min.js"></script>
   <style>
     :root { color-scheme: light; }
     * { box-sizing: border-box; }
@@ -32,6 +33,14 @@
     figure { margin: 0; }
     figcaption { font-size: 12px; color: #5c584f; margin-bottom: 6px; }
     img { width: 100%; background: #f7f5f1; border-radius: 8px; }
+    model-viewer {
+      width: 100%;
+      height: 360px;
+      background: #f7f5f1;
+      border-radius: 8px;
+      --poster-color: transparent;
+    }
+    .viewer-note { font-size: 12px; color: #5c584f; margin-top: 6px; }
     table { width: 100%; border-collapse: collapse; margin-top: 16px; font-size: 14px; }
     th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid #eee8df; vertical-align: top; }
     th { font-size: 12px; color: #5c584f; font-weight: 600; }
@@ -97,6 +106,11 @@
           <p id="visual-error" class="error"></p>
         </figure>
       </div>
+      <div id="viewer-3d-section" hidden>
+        <figcaption>3D preview <span class="viewer-note">drag to orbit &middot; best-effort, not a verified reconstruction</span></figcaption>
+        <model-viewer id="viewer-3d" camera-controls auto-rotate exposure="1" shadow-intensity="1"></model-viewer>
+        <p id="viewer-3d-error" class="error"></p>
+      </div>
       <table>
         <thead>
           <tr><th>Metric</th><th id="base-head">Baseline</th><th id="cand-head">Candidate</th></tr>
@@ -109,7 +123,7 @@
       <p id="assumptions" class="note"></p>
     </section>
   </main>
-  <footer id="disclaimer">Concept-stage screening estimate. Not a manufacturing quote, BOM estimate, structural simulation, or thermal validation.</footer>
+  <footer id="disclaimer">Concept-stage screening estimate. Not a manufacturing quote, BOM estimate, structural simulation, or thermal validation. 3D preview is a best-effort reconstruction from the 2D concept image, not a verified 3D scan or CAD model. 3D preview powered by Stability AI (Stable Fast 3D), licensed under the Stability AI Community License.</footer>
   <script>
     const form = document.querySelector("#studio");
     const status = document.querySelector("#status");
@@ -198,6 +212,20 @@
         visualError.textContent = body.visual.error || "Image generation failed. Material screening is still shown.";
       }
       document.querySelector("#placeholder").textContent = body.visual.placeholder ? "· placeholder until the visual engine is connected" : "";
+      const viewerSection = document.querySelector("#viewer-3d-section");
+      const viewer3d = document.querySelector("#viewer-3d");
+      const viewer3dError = document.querySelector("#viewer-3d-error");
+      if (body.reconstruction && body.reconstruction.status === "success" && body.reconstruction.glb_url) {
+        viewerSection.hidden = false;
+        viewer3d.src = body.reconstruction.glb_url;
+        viewer3dError.textContent = "";
+      } else {
+        // Best-effort and additive: hide the section rather than showing
+        // an error, since the 2D image + material report above already
+        // stand alone as a complete, valid result.
+        viewerSection.hidden = true;
+        viewer3dError.textContent = "";
+      }
       document.querySelector("#summary").textContent = body.explanation.summary;
       const tradeoffs = document.querySelector("#tradeoffs");
       tradeoffs.replaceChildren();

@@ -38,6 +38,29 @@ pip install -r requirements-ml.txt
 bash scripts/download_models.sh
 ```
 
+## Optional: 3D preview
+
+`visual_engine/reconstruct3d.py` adds a best-effort, orbit-able 3D preview
+reconstructed from the generated 2D concept image, using Stability AI's
+[Stable Fast 3D](https://huggingface.co/stabilityai/stable-fast-3d). This
+is additive on top of the 2D image (which remains the primary, reliable
+output) -- see `third_party/README.md` for the full setup and rationale.
+
+Quick start:
+
+```bash
+bash scripts/setup_sf3d_env.sh          # one-time: builds the protoskin3d env
+bash scripts/download_models.sh         # say yes when asked about Stable Fast 3D
+bash scripts/run_sf3d_service.sh        # run alongside the main gateway
+```
+
+The main gateway (`gateway_and_ui/backend/main.py`) calls this sidecar
+service over HTTP (`PROTOSKIN_SF3D_SERVICE_URL`, default
+`http://127.0.0.1:8100`) and folds the result into `/api/concept`'s
+response as `reconstruction`. If the service isn't running or reconstruction
+fails, the 2D image and material report still return normally -- the 3D
+viewer just doesn't appear.
+
 ### Who edits what
 
 | Folder | Owner | Frozen entry point |

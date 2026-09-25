@@ -6,6 +6,7 @@ import threading
 import uuid
 from pathlib import Path
 
+import httpx
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -23,7 +24,7 @@ from shared.config import (
     load_materials,
     load_profiles,
 )
-from shared.schemas import ConceptResponse, VisualResult
+from shared.schemas import ConceptResponse, Reconstruction3DResult, VisualResult
 
 logger = logging.getLogger("gateway_and_ui.backend.main")
 
@@ -31,10 +32,21 @@ app = FastAPI(title="ProtoSkin", version="0.1.0")
 
 DEMO_OUTPUTS.mkdir(parents=True, exist_ok=True)
 app.mount("/outputs", StaticFiles(directory=DEMO_OUTPUTS), name="outputs")
+# Serves self-hosted static assets (e.g. model-viewer.min.js) referenced by
+# index.html -- keeps the "zero external calls" claim true for the 3D
+# viewer too, not just the model inference.
+app.mount("/static", StaticFiles(directory=FRONTEND_DIR), name="static")
 
 # Set PROTOSKIN_SKIP_WARMUP=1 to skip loading real models at startup, e.g.
 # for fast local iteration on the gateway/UI without a GPU or model weights.
 _SKIP_WARMUP = os.environ.get("PROTOSKIN_SKIP_WARMUP") == "1"
+
+# The 3D reconstruction sidecar (gateway_and_ui/backend/service_3d.py) runs
+# as its own process under a separate Python environment -- see
+# scripts/run_sf3d_service.sh and third_party/README.md for why. This
+# gateway only ever talks to it over plain HTTP, never imports it.
+_SF3D_SERVICE_URL = os.environ.get("PROTOSKIN_SF3D_SERVICE_URL", "http://127.0.0.1:8100")
+_SF3D_TIMEOUT_S = float(os.environ.get("PROTOSKIN_SF3D_TIMEOUT_S", "60"))
 
 
 @app.on_event("startup")
@@ -161,9 +173,37 @@ async def concept(
         explanation = template_explanation(materials)
         explanation.error = str(exc)
 
+    # Best-effort 3D preview, reconstructed from the 2D concept image via
+    # the SF3D sidecar. Additive and non-blocking: any failure here (the
+    # service being down, a timeout, a bad image) degrades to
+    # Reconstruction3DResult(status="error") without affecting the 2D
+    # image or material report already computed above -- mirrors how a
+    # failed `visual` generation above still returns a usable response.
+    if visual.status == "success" and visual.image_path:
+        try:
+            # visual.image_path is repo-root-relative (e.g.
+            # "demo_outputs/concept-xxx.png"); DEMO_OUTPUTS is that same
+            # directory as an absolute path, so re-derive the absolute path
+            # from the filename rather than assuming the process CWD.
+            image_path = str(DEMO_OUTPUTS / Path(visual.image_path).name)
+            sf3d_response = httpx.post(
+                f"{_SF3D_SERVICE_URL}/reconstruct",
+                json={"image_path": image_path, "remesh_option": "quad"},
+                timeout=_SF3D_TIMEOUT_S,
+            )
+            sf3d_response.raise_for_status()
+            reconstruction = Reconstruction3DResult(**sf3d_response.json())
+        except Exception as exc:
+            reconstruction = Reconstruction3DResult(status="error", error=str(exc))
+    else:
+        reconstruction = Reconstruction3DResult(
+            status="error", error="Skipped: no 2D concept image to reconstruct from."
+        )
+
     return ConceptResponse(
         visual=visual,
         materials=materials,
         explanation=explanation,
+        reconstruction=reconstruction,
         disclaimer=DISCLAIMER,
     )
