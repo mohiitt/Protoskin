@@ -1,47 +1,56 @@
 # third_party/
 
-Vendored source for dependencies that couldn't be installed as plain pip
-packages. Tracked in git (unlike `models/`) because these are patched copies,
-not reproducible downloads.
+Vendored source for dependencies that aren't installable as plain pip
+packages. Tracked in git (unlike `models/`) because these are copies with
+small, documented ProtoSkin patches.
 
-## stable-fast-3d/
+## TripoSG/
 
-Cloned from [`Stability-AI/stable-fast-3d`](https://github.com/Stability-AI/stable-fast-3d)
-(commit at clone time; see `git log -1` inside the directory), used by
-`visual_engine/reconstruct3d.py` via the sidecar process described in
-`scripts/run_sf3d_service.sh`.
+The `triposg/` Python package from
+[`VAST-AI-Research/TripoSG`](https://github.com/VAST-AI-Research/TripoSG)
+(upstream commit in `UPSTREAM_COMMIT`), used by
+`visual_engine/reconstruct3d.py` for the 3D preview via the sidecar
+process started by `scripts/run_3d_service.sh`.
 
-License: Stability AI Community License (free for personal/hackathon use and
-orgs under $1M/yr revenue; see `LICENSE.md` inside this directory). The app's
-UI must display "Powered by Stability AI" and name the license per its terms
-— see the disclaimer footer in `gateway_and_ui/frontend/index.html`.
+**License: MIT** (code and weights) -- see `LICENSE` and `NOTICE` in this
+directory. Only the `triposg/` package is vendored; upstream's `scripts/`
+(which pull in the non-open Bria RMBG-1.4 background remover) and example
+assets are not.
 
-### Why this is vendored instead of `pip install stable-fast-3d`
+### Why this is vendored instead of pip-installed
 
-The package isn't published to PyPI as an importable library — its own
-`setup.py`/`pyproject.toml` don't exist at the repo root in an installable
-form; usage is via `python run.py <image>` from a checkout. This vendored
-copy is what `reconstruct3d.py` imports `sf3d.system.SF3D` from directly
-(with the directory added to `sys.path`).
+TripoSG isn't published as a pip package; its README runs it from a
+checkout. `reconstruct3d.py` adds this directory to `sys.path` and imports
+`triposg.pipelines.pipeline_triposg.TripoSGPipeline` directly.
 
-### `stable-fast-3d` itself is unpatched
+### The one ProtoSkin patch: `diso` made optional
 
-This is a plain, unmodified copy of the upstream repo (its own `.git` history
-was dropped so it plugs cleanly into this repo instead of nesting a second
-git repo). The build issues on this machine (aarch64 Linux, GCC 13, CUDA
-13.0) were entirely in two of its from-source Python dependencies —
-`gpytoolbox` and `pynanoinstantmeshes` — neither of which ships an aarch64
-Linux wheel on PyPI. Those two are built separately (not vendored as source
-here; `scripts/setup_sf3d_env.sh` clones and patches them into a scratch
-directory as part of building the `protoskin3d` conda env) with small,
-documented CMake/compiler-flag patches — see that script for the exact fixes
-and the reasoning behind each one.
+`triposg/inference_utils.py` imported `diso` (`DiffDMC`) at module top
+level. `diso` is licensed **CC BY-NC 4.0** -- non-commercial, not open
+source -- and is only used by TripoSG's optional *flash* surface extractor.
+The patch moves that import inside `flash_extract_geometry()`, so the
+package imports without `diso` installed. ProtoSkin always calls the
+pipeline with `use_flash_decoder=False`, which uses
+`hierarchical_extract_geometry()` -- scikit-image marching cubes (BSD) on a
+512^3 grid. `scripts/setup_3d_env.sh` asserts `diso` is not installed.
+
+### Open-source audit of the 3D path
+
+| Component | Licence |
+|---|---|
+| TripoSG code + weights | MIT |
+| DINOv2 image encoder (bundled in the TripoSG weights) | Apache-2.0 |
+| scikit-image marching cubes | BSD-3-Clause |
+| rembg + isnet-general-use / u2net masks | MIT / Apache-2.0 |
+| fast-simplification (mesh decimation) | MIT |
+| diffusers / transformers / peft | Apache-2.0 |
+| model-viewer (browser 3D viewer, self-hosted bundle) | Apache-2.0 (google/model-viewer); the bundle also carries BSD-3-Clause (Lit) and MIT (three.js) headers |
+
+Deliberately **not** used: `diso` (CC BY-NC 4.0) and Bria RMBG-1.4
+(Bria licence), TripoSG's two non-open defaults.
 
 ## Not committing model weights here
 
-`stable-fast-3d/model.safetensors` (and the base SDXL/ControlNet/Qwen
-weights) are *not* in this directory or in git. They're downloaded
-separately to `PROTOSKIN_SF3D` (see `.env.example`) via Hugging Face, same
-as every other model this project uses. Downloading Stable Fast 3D's
-weights requires requesting access on its Hugging Face model page first
-(auto-approved, but a real account action — see `scripts/download_models.sh`).
+TripoSG's weights (~7.5GB), like the SDXL / ControlNet / Qwen weights, are
+*not* in this directory or in git. They're downloaded separately to
+`PROTOSKIN_TRIPOSG` (see `.env.example`) by `scripts/download_models.sh`.

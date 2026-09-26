@@ -35,7 +35,9 @@ _DEFAULT_CONTROLNET_PATH = ROOT / "models" / "controlnet-canny-sdxl"
 # edge map when depth was requested.
 _SUPPORTED_CONTROL_MODES = {"canny"}
 
-_DEFAULT_NUM_INFERENCE_STEPS = 30
+# 20 steps: visually indistinguishable from 30 on the ZGX Nano test inputs
+# (compared side by side), ~3.6s vs ~5.3s -- keeps image + 3D within ~20s.
+_DEFAULT_NUM_INFERENCE_STEPS = 20
 _DEFAULT_GUIDANCE_SCALE = 6.5
 # How strongly the ControlNet conditioning is followed. This is the main
 # knob for "preserve structure vs. allow material restyling" called out
@@ -133,12 +135,28 @@ class _SDXLCannyPipeline:
 
 
 def warm_up() -> None:
-    """Force-load the pipeline ahead of the live demo.
+    """Load the pipeline and run one tiny generation ahead of the live demo.
 
-    Call this once at process startup so the first real request isn't
-    paying model-load latency in front of an audience.
+    Call this once at process startup. Loading alone isn't enough: the
+    first real generation also pays one-time costs (CUDA kernel selection,
+    the VAE's float32 upcast path) -- measured at over a minute for the
+    first request on the ZGX Nano. A 2-step 512px run here absorbs them so
+    the first request in front of an audience is as fast as the rest.
     """
-    _SDXLCannyPipeline.get()
+    from PIL import Image
+
+    pipeline = _SDXLCannyPipeline.get()
+    blank_edges = Image.new("RGB", (512, 512))
+    pipeline.run(
+        control_image=blank_edges,
+        init_size=blank_edges.size,
+        prompt="product",
+        negative_prompt="",
+        seed=0,
+        num_inference_steps=2,
+        guidance_scale=_DEFAULT_GUIDANCE_SCALE,
+        controlnet_conditioning_scale=_DEFAULT_CONTROLNET_CONDITIONING_SCALE,
+    )
 
 
 def generate_concept(

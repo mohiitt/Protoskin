@@ -1,17 +1,17 @@
-"""Sidecar 3D reconstruction service.
+"""Sidecar 3D reconstruction service (TripoSG, MIT).
 
-Runs as its own process under the `protoskin3d` conda environment (see
-scripts/setup_sf3d_env.sh and scripts/run_sf3d_service.sh) -- separate
-from the main gateway process because Stable Fast 3D's pinned
-dependencies (transformers==4.42.3, trimesh==4.4.1) conflict with what
-the local LLM explainer needs in the main `zgx` environment.
+Runs as its own process under the `protoskin3d-os` conda environment (see
+scripts/setup_3d_env.sh and scripts/run_3d_service.sh) -- separate from
+the main gateway process because TripoSG needs diffusers/transformers
+versions that differ from what the rest of the app uses in the main
+`zgx` environment.
 
 The main gateway (gateway_and_ui/backend/main.py) talks to this over
-plain HTTP on PROTOSKIN_SF3D_SERVICE_URL (default
-http://127.0.0.1:8100), never by importing this module directly.
+plain HTTP on PROTOSKIN_3D_SERVICE_URL (default http://127.0.0.1:8100),
+never by importing this module directly.
 
 Start with:
-    PROTOSKIN_SF3D_PYTHON -m uvicorn gateway_and_ui.backend.service_3d:app --port 8100
+    $PROTOSKIN_3D_PYTHON -m uvicorn gateway_and_ui.backend.service_3d:app --port 8100
 
 or via the wrapper script, which also picks the right environment.
 """
@@ -43,20 +43,20 @@ _SKIP_WARMUP = os.environ.get("PROTOSKIN_SKIP_WARMUP") == "1"
 @app.on_event("startup")
 def _warm_up() -> None:
     if _SKIP_WARMUP:
-        logger.info("PROTOSKIN_SKIP_WARMUP=1 set; skipping SF3D warm-up")
+        logger.info("PROTOSKIN_SKIP_WARMUP=1 set; skipping TripoSG warm-up")
         return
 
     def _run():
         from visual_engine.reconstruct3d import warm_up
 
         try:
-            logger.info("Warming up Stable Fast 3D...")
+            logger.info("Warming up TripoSG...")
             warm_up()
-            logger.info("Stable Fast 3D warm.")
+            logger.info("TripoSG warm.")
         except Exception:
-            logger.exception("SF3D warm-up failed; will load on first request instead.")
+            logger.exception("TripoSG warm-up failed; will load on first request instead.")
 
-    threading.Thread(target=_run, name="sf3d-warmup", daemon=True).start()
+    threading.Thread(target=_run, name="triposg-warmup", daemon=True).start()
 
 
 @app.get("/health")
@@ -66,9 +66,13 @@ def health():
 
 class ReconstructRequest(BaseModel):
     image_path: str
-    remesh_option: str = "quad"
-    foreground_ratio: float = 0.85
-    texture_resolution: int = 1024
+    # Largest real-world dimension to scale the mesh to, from the product
+    # profile's nominal_size_mm; omitted = unitless (1 m largest dimension).
+    target_max_mm: float | None = None
+    # Supplied by the gateway from the selected material/finish (see
+    # visual_engine.prompts.pbr_params); omitted = neutral defaults.
+    roughness: float | None = None
+    metallic: float | None = None
     use_model: bool = True
 
 
@@ -79,14 +83,15 @@ def reconstruct(request: ReconstructRequest):
     try:
         return reconstruct_3d(
             request.image_path,
-            remesh_option=request.remesh_option,
-            foreground_ratio=request.foreground_ratio,
-            texture_resolution=request.texture_resolution,
+            target_max_mm=request.target_max_mm,
+            roughness=request.roughness,
+            metallic=request.metallic,
             use_model=request.use_model,
         )
     except Reconstruction3DError as exc:
         # A structured error the gateway can fold into
         # Reconstruction3DResult(status="error"), not a 500 -- this is an
         # expected, handled failure mode (missing model, bad image, OOM),
-        # not a bug in the service itself.
+        # not a bug in the service itself. Logged so it's diagnosable here.
+        logger.warning("Reconstruction failed for %s: %s", request.image_path, exc)
         raise HTTPException(status_code=422, detail=str(exc)) from exc

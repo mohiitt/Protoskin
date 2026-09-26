@@ -37,6 +37,28 @@ def test_unknown_material_raises():
     raise AssertionError("expected ValueError")
 
 
+def test_custom_product_uses_entered_volume():
+    result = compare_materials(
+        "custom",
+        "standard_abs",
+        "recycled_aluminum",
+        custom_product_type="headphone case",
+        custom_volume_cm3=40,
+    )
+    assert result.product_type == "headphone case"
+    assert result.baseline_mass_g == 42.0  # 1050 kg/m³ * 40 cm³
+    assert result.candidate_mass_g == 108.0  # 2700 kg/m³ * 40 cm³
+    assert "user-entered" in result.assumptions[0]
+
+
+def test_custom_product_without_volume_raises():
+    try:
+        compare_materials("custom", "standard_abs", "recycled_aluminum", custom_product_type="teapot")
+    except ValueError:
+        return
+    raise AssertionError("expected ValueError: volume is never guessed")
+
+
 def test_explanation_repeats_calculator_numbers():
     comparison = compare_materials("printer_compact", "standard_abs", "recycled_fiber_composite")
     explanation = explain_result(comparison, use_llm=False)
@@ -62,6 +84,8 @@ if __name__ == "__main__":
     test_mass_and_cost_are_fixed()
     test_same_inputs_match()
     test_unknown_material_raises()
+    test_custom_product_uses_entered_volume()
+    test_custom_product_without_volume_raises()
     test_explanation_repeats_calculator_numbers()
     test_template_explanation_matches_explain_result_fallback()
     test_explain_result_falls_back_without_crashing_when_llm_disabled()

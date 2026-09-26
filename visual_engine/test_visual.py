@@ -7,7 +7,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from shared.config import SAMPLE_WIREFRAME
 from visual_engine.pipeline import generate_concept
-from visual_engine.prompts import build_prompt
+from visual_engine.prompts import build_prompt, pbr_params
 
 
 def test_prompt_uses_material_config():
@@ -23,6 +23,17 @@ def test_prompt_uses_material_config():
     assert "matte finish" in prompt
     assert "soft studio lighting" in prompt
     assert "extra screens" in negative
+
+
+def test_pbr_params_follow_material_and_finish():
+    """3D preview material: metals come out metallic, finish drives roughness."""
+    assert pbr_params("recycled_aluminum", "satin") == (0.5, 1.0)
+    assert pbr_params("ocean_bound_polymer", "matte") == (0.75, 0.0)
+    rough_gloss, _ = pbr_params("standard_abs", "gloss")
+    rough_matte, _ = pbr_params("standard_abs", "matte")
+    assert rough_gloss < rough_matte
+    # Unknown finish falls back to the material's own default finish.
+    assert pbr_params("recycled_magnesium", "unknown")[0] == 0.5
 
 
 def test_generate_concept_placeholder():
@@ -84,6 +95,7 @@ def test_generate_concept_real_model():
 
 if __name__ == "__main__":
     test_prompt_uses_material_config()
+    test_pbr_params_follow_material_and_finish()
     test_generate_concept_placeholder()
     test_missing_image_raises()
     test_canny_preprocessing_on_sample_input()

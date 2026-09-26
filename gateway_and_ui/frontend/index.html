@@ -8,6 +8,8 @@
   <style>
     :root { color-scheme: light; }
     * { box-sizing: border-box; }
+    /* Keep the `hidden` attribute effective on elements whose class sets display (e.g. .row). */
+    [hidden] { display: none !important; }
     body {
       margin: 0;
       background: #f3f0ea;
@@ -62,8 +64,20 @@
     <form id="studio">
       <label for="image">Product sketch</label>
       <input id="image" name="image" type="file" accept="image/*" required>
-      <label for="profile">Product profile</label>
-      <select id="profile" name="product_profile_id" required></select>
+      <label for="profile">Product (pick a preset or type your own)</label>
+      <input id="profile" list="profile-presets" autocomplete="off" required
+        placeholder="e.g. 13-inch Laptop Shell, headphone case, teapot">
+      <datalist id="profile-presets"></datalist>
+      <div id="custom-product" class="row" hidden>
+        <div>
+          <label for="custom-size">Largest size, mm (optional)</label>
+          <input id="custom-size" type="number" min="1" step="any" placeholder="e.g. 250">
+        </div>
+        <div>
+          <label for="custom-volume">Shell volume, cm³ (optional)</label>
+          <input id="custom-volume" type="number" min="0.1" step="any" placeholder="for mass/cost">
+        </div>
+      </div>
       <label for="control">Input type</label>
       <select id="control" name="control_mode"></select>
       <div class="row">
@@ -108,10 +122,17 @@
       </div>
       <div id="viewer-3d-section" hidden>
         <figcaption>3D preview <span class="viewer-note">drag to orbit &middot; best-effort, not a verified reconstruction</span></figcaption>
-        <model-viewer id="viewer-3d" camera-controls auto-rotate exposure="1" shadow-intensity="1"></model-viewer>
+        <!-- camera-orbit is replaced per result with the fitted view the concept
+             image was taken from (reconstruction.view_orbit_deg); this is a fallback. -->
+        <model-viewer id="viewer-3d" camera-controls auto-rotate
+          environment-image="neutral" tone-mapping="agx"
+          exposure="1.1" shadow-intensity="1" shadow-softness="0.8"
+          camera-orbit="215deg 70deg auto"></model-viewer>
+        <p id="viewer-3d-dims" class="viewer-note"></p>
         <p id="viewer-3d-error" class="error"></p>
       </div>
-      <table>
+      <p id="metrics-note" class="note" hidden></p>
+      <table id="metrics-table">
         <thead>
           <tr><th>Metric</th><th id="base-head">Baseline</th><th id="cand-head">Candidate</th></tr>
         </thead>
@@ -123,7 +144,7 @@
       <p id="assumptions" class="note"></p>
     </section>
   </main>
-  <footer id="disclaimer">Concept-stage screening estimate. Not a manufacturing quote, BOM estimate, structural simulation, or thermal validation. 3D preview is a best-effort reconstruction from the 2D concept image, not a verified 3D scan or CAD model. 3D preview powered by Stability AI (Stable Fast 3D), licensed under the Stability AI Community License.</footer>
+  <footer id="disclaimer">Concept-stage screening estimate. Not a manufacturing quote, BOM estimate, structural simulation, or thermal validation. 3D preview is a best-effort reconstruction from the 2D concept image, not a verified 3D scan or CAD model; its size is scaled to the product profile's nominal dimensions. 3D shape by TripoSG (MIT licence).</footer>
   <script>
     const form = document.querySelector("#studio");
     const status = document.querySelector("#status");
@@ -142,16 +163,33 @@
       }
     }
 
-    function applyProfileDefault() {
-      const profile = profiles.find((item) => item.id === form.product_profile_id.value);
-      if (profile) form.baseline_material_id.value = profile.baseline_material;
+    const productInput = document.querySelector("#profile");
+    const customBox = document.querySelector("#custom-product");
+
+    // A typed value matching a preset's label (case-insensitive) is that
+    // preset; anything else is a custom product.
+    function matchedPreset() {
+      const text = productInput.value.trim().toLowerCase();
+      return profiles.find((item) => item.label.toLowerCase() === text);
+    }
+
+    function onProductChange() {
+      const preset = matchedPreset();
+      customBox.hidden = Boolean(preset) || !productInput.value.trim();
+      if (preset) form.baseline_material_id.value = preset.baseline_material;
     }
 
     fetch("/api/options")
       .then((res) => res.json())
       .then((data) => {
         profiles = data.profiles;
-        fill(form.product_profile_id, data.profiles, "laptop_13");
+        const presets = document.querySelector("#profile-presets");
+        for (const item of data.profiles) {
+          const option = document.createElement("option");
+          option.value = item.label;
+          presets.appendChild(option);
+        }
+        productInput.value = data.profiles.find((item) => item.id === "laptop_13")?.label || "";
         fill(form.control_mode, data.control_modes, "canny");
         fill(form.baseline_material_id, data.materials, "recycled_aluminum");
         fill(form.candidate_material_id, data.materials, "ocean_bound_polymer");
@@ -159,7 +197,7 @@
         fill(form.texture, data.textures, "fine");
         fill(form.color, data.colors, "graphite");
         document.querySelector("#disclaimer").textContent = data.disclaimer;
-        form.product_profile_id.addEventListener("change", applyProfileDefault);
+        productInput.addEventListener("input", onProductChange);
         form.querySelector("#go").disabled = false;
       })
       .catch(() => { status.textContent = "Could not load shared options."; status.className = "status error"; });
@@ -178,29 +216,62 @@
 
     form.addEventListener("submit", async (event) => {
       event.preventDefault();
+      const goButton = form.querySelector("#go");
+      if (goButton.disabled) return;  // one request at a time from this page
+      const data = new FormData(form);
+      const preset = matchedPreset();
+      if (preset) {
+        data.append("product_profile_id", preset.id);
+      } else {
+        data.append("product_name", productInput.value.trim());
+        const size = document.querySelector("#custom-size").value;
+        const volume = document.querySelector("#custom-volume").value;
+        if (size) data.append("product_max_mm", size);
+        if (volume) data.append("product_volume_cm3", volume);
+      }
       status.className = "status";
       status.textContent = "Running locally…";
+      goButton.disabled = true;
+      const started = performance.now();
       const file = form.image.files[0];
       document.querySelector("#original").src = URL.createObjectURL(file);
-      const response = await fetch("/api/concept", { method: "POST", body: new FormData(form) });
-      const body = await response.json();
+      let response, body;
+      try {
+        response = await fetch("/api/concept", { method: "POST", body: data });
+        body = await response.json();
+      } catch (err) {
+        status.textContent = "Request failed: " + err;
+        status.className = "status error";
+        goButton.disabled = false;
+        return;
+      }
+      goButton.disabled = false;
       if (!response.ok) {
         status.textContent = typeof body.detail === "string" ? body.detail : "Request failed";
         status.className = "status error";
         return;
       }
       const materials = body.materials;
-      document.querySelector("#base-head").textContent = materials.baseline_label;
-      document.querySelector("#cand-head").textContent = materials.candidate_label;
-      const metrics = document.querySelector("#metrics");
-      metrics.replaceChildren(
-        row("Estimated shell mass", `${materials.baseline_mass_g} g`, `${materials.candidate_mass_g} g`),
-        row("Relative mass", "—", `${materials.mass_delta_percent}%`),
-        row("Raw material estimate", `$${materials.baseline_raw_material_cost_usd.toFixed(2)}`, `$${materials.candidate_raw_material_cost_usd.toFixed(2)}`),
-        row("Raw material delta", "—", `${materials.raw_material_cost_delta_usd >= 0 ? "+" : "−"}$${Math.abs(materials.raw_material_cost_delta_usd).toFixed(2)}`),
-        row("Thermal conductivity", `${materials.baseline_thermal_conductivity_w_mk} W/m·K`, `${materials.candidate_thermal_conductivity_w_mk} W/m·K`),
-        row("Recycled content", `${materials.baseline_recycled_content_percent}%`, `${materials.recycled_content_percent}%`)
-      );
+      const metricsTable = document.querySelector("#metrics-table");
+      const metricsNote = document.querySelector("#metrics-note");
+      if (materials) {
+        metricsTable.hidden = false;
+        metricsNote.hidden = true;
+        document.querySelector("#base-head").textContent = materials.baseline_label;
+        document.querySelector("#cand-head").textContent = materials.candidate_label;
+        document.querySelector("#metrics").replaceChildren(
+          row("Estimated shell mass", `${materials.baseline_mass_g} g`, `${materials.candidate_mass_g} g`),
+          row("Relative mass", "—", `${materials.mass_delta_percent}%`),
+          row("Raw material estimate", `$${materials.baseline_raw_material_cost_usd.toFixed(2)}`, `$${materials.candidate_raw_material_cost_usd.toFixed(2)}`),
+          row("Raw material delta", "—", `${materials.raw_material_cost_delta_usd >= 0 ? "+" : "−"}$${Math.abs(materials.raw_material_cost_delta_usd).toFixed(2)}`),
+          row("Thermal conductivity", `${materials.baseline_thermal_conductivity_w_mk} W/m·K`, `${materials.candidate_thermal_conductivity_w_mk} W/m·K`),
+          row("Recycled content", `${materials.baseline_recycled_content_percent}%`, `${materials.recycled_content_percent}%`)
+        );
+      } else {
+        metricsTable.hidden = true;
+        metricsNote.hidden = false;
+        metricsNote.textContent = "No mass/cost estimate: enter a shell volume (cm³) for a custom product to compute one.";
+      }
       const concept = document.querySelector("#concept");
       const visualError = document.querySelector("#visual-error");
       if (body.visual.status === "success" && body.visual.image_url) {
@@ -215,9 +286,18 @@
       const viewerSection = document.querySelector("#viewer-3d-section");
       const viewer3d = document.querySelector("#viewer-3d");
       const viewer3dError = document.querySelector("#viewer-3d-error");
-      if (body.reconstruction && body.reconstruction.status === "success" && body.reconstruction.glb_url) {
+      const viewer3dDims = document.querySelector("#viewer-3d-dims");
+      const recon = body.reconstruction;
+      if (recon && recon.status === "success" && recon.glb_url) {
         viewerSection.hidden = false;
-        viewer3d.src = body.reconstruction.glb_url;
+        if (recon.view_orbit_deg) {
+          // Open on the side the concept image was photographed from.
+          viewer3d.cameraOrbit = `${recon.view_orbit_deg[0]}deg ${recon.view_orbit_deg[1]}deg auto`;
+        }
+        viewer3d.src = recon.glb_url;
+        viewer3dDims.textContent = recon.dimensions_mm
+          ? `≈ ${recon.dimensions_mm.map((v) => Math.round(v)).join(" × ")} mm (W × D × H) · nominal: scaled to the given size, proportions AI-estimated`
+          : "Size not scaled: pick a preset or enter a largest size (mm) to see real dimensions.";
         viewer3dError.textContent = "";
       } else {
         // Best-effort and additive: hide the section rather than showing
@@ -226,19 +306,49 @@
         viewerSection.hidden = true;
         viewer3dError.textContent = "";
       }
-      document.querySelector("#summary").textContent = body.explanation.summary;
+      showExplanation(body.explanation);
+      document.querySelector("#assumptions").textContent = materials ? materials.assumptions.join(" ") : "";
+      document.querySelector("#disclaimer").textContent = body.disclaimer;
+      results.hidden = false;
+      const total = ((performance.now() - started) / 1000).toFixed(1);
+      const recon3d = recon && recon.status === "success" ? ` · 3D ${recon.reconstruction_time_s}s` : "";
+      const timing = `Done in ${total}s (image ${body.visual.generation_time_s}s${recon3d}) · seed ${body.visual.seed ?? "—"}`;
+      if (!materials) {
+        status.textContent = timing;
+        return;
+      }
+      // The local LLM's wording arrives after the image + 3D (it would slow
+      // them down if run alongside -- shared memory bandwidth). Until then the
+      // deterministic explanation above is shown; the numbers are identical.
+      status.textContent = `${timing} · writing AI explanation…`;
+      const requestId = ++explainRequest;
+      try {
+        const res = await fetch("/api/explain", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(materials),
+        });
+        const explanation = await res.json();
+        if (requestId !== explainRequest) return;  // a newer concept replaced this one
+        if (res.ok) showExplanation(explanation);
+        status.textContent = `${timing} · explanation: ${res.ok ? explanation.source : "template"}`;
+      } catch (err) {
+        if (requestId === explainRequest) status.textContent = `${timing} · explanation: template`;
+      }
+    });
+
+    let explainRequest = 0;
+
+    function showExplanation(explanation) {
+      document.querySelector("#summary").textContent = explanation.summary;
       const tradeoffs = document.querySelector("#tradeoffs");
       tradeoffs.replaceChildren();
-      for (const item of body.explanation.tradeoffs) {
+      for (const item of explanation.tradeoffs) {
         const li = document.createElement("li");
         li.textContent = item;
         tradeoffs.appendChild(li);
       }
-      document.querySelector("#assumptions").textContent = body.materials.assumptions.join(" ");
-      document.querySelector("#disclaimer").textContent = body.disclaimer;
-      results.hidden = false;
-      status.textContent = `Done in ${body.visual.generation_time_s}s · seed ${body.visual.seed ?? "—"} · explanation: ${body.explanation.source}`;
-    });
+    }
   </script>
 </body>
 </html>

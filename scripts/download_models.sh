@@ -23,15 +23,13 @@ hf download Qwen/Qwen3-8B \
 echo "Primary models are in models/. Optional depth and fallback models are listed in the implementation plan."
 
 # Optional: 3D preview reconstruction (visual_engine/reconstruct3d.py).
-# stabilityai/stable-fast-3d is gated (auto-approved, but requires visiting
-# https://huggingface.co/stabilityai/stable-fast-3d while logged in and
-# submitting the access request first -- see third_party/README.md). Also
-# needs its own Python environment; run scripts/setup_sf3d_env.sh once,
-# separately, before this model is usable.
-read -r -p "Download Stable Fast 3D for the optional 3D preview? [y/N] " reply
+# VAST-AI/TripoSG is MIT-licensed and not gated (~7.5GB, includes its own
+# Apache-2.0 DINOv2 image encoder). It needs its own Python environment;
+# run scripts/setup_3d_env.sh once, separately, before it's usable.
+read -r -p "Download TripoSG for the optional 3D preview? [y/N] " reply
 if [[ "$reply" =~ ^[Yy]$ ]]; then
-  hf download stabilityai/stable-fast-3d \
-    --local-dir models/stable-fast-3d
-  echo "Stable Fast 3D weights are in models/stable-fast-3d."
-  echo "Run scripts/setup_sf3d_env.sh next to set up its Python environment."
+  hf download VAST-AI/TripoSG \
+    --local-dir models/TripoSG
+  echo "TripoSG weights are in models/TripoSG."
+  echo "Run scripts/setup_3d_env.sh next to set up its Python environment."
 fi

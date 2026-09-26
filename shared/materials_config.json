@@ -5,6 +5,7 @@
       "appearance": "brushed recycled aluminum with a cool silver grain",
       "finish": "satin",
       "reflectivity": "medium",
+      "metallic": 1.0,
       "texture": "fine",
       "prompt": "brushed recycled aluminum, cool silver grain",
       "negative_prompt": ""
@@ -24,6 +25,7 @@
       "appearance": "fine recycled speckling, dark graphite polymer",
       "finish": "matte",
       "reflectivity": "low",
+      "metallic": 0.0,
       "texture": "fine",
       "prompt": "ocean-bound recycled polymer, fine graphite speckling, matte",
       "negative_prompt": ""
@@ -43,6 +45,7 @@
       "appearance": "light warm-gray magnesium with a soft metallic sheen",
       "finish": "satin",
       "reflectivity": "medium",
+      "metallic": 1.0,
       "texture": "fine",
       "prompt": "recycled magnesium alloy, light warm gray, soft metallic sheen",
       "negative_prompt": ""
@@ -62,6 +65,7 @@
       "appearance": "molded fiber composite with a visible fine weave",
       "finish": "matte",
       "reflectivity": "low",
+      "metallic": 0.0,
       "texture": "medium",
       "prompt": "molded recycled fiber composite, visible fine weave, matte",
       "negative_prompt": ""
@@ -81,6 +85,7 @@
       "appearance": "smooth injection-molded ABS, uniform charcoal",
       "finish": "semi-gloss",
       "reflectivity": "medium",
+      "metallic": 0.0,
       "texture": "fine",
       "prompt": "standard ABS plastic, smooth charcoal, injection-molded",
       "negative_prompt": ""

@@ -26,6 +26,9 @@ def compare_materials(
     product_profile_id: str,
     baseline_material_id: str,
     candidate_material_id: str,
+    *,
+    custom_product_type: str | None = None,
+    custom_volume_cm3: float | None = None,
 ) -> MaterialComparison:
     """Compare two materials for one product profile.
 
@@ -33,8 +36,19 @@ def compare_materials(
     raw material cost = mass * cost per kg
 
     Screening only. Same inputs always return the same numbers.
+
+    For a product that isn't one of the preset profiles, pass
+    ``custom_product_type`` and the user-supplied ``custom_volume_cm3``
+    instead of a profile (``product_profile_id`` is then recorded as-is,
+    e.g. "custom"). The volume is never guessed: callers without one must
+    not call this.
     """
-    profile = get_profile(product_profile_id)
+    if custom_product_type is not None:
+        if custom_volume_cm3 is None or custom_volume_cm3 <= 0:
+            raise ValueError("A custom product needs a positive shell volume (cm³)")
+        profile = {"product_type": custom_product_type, "estimated_shell_volume_cm3": custom_volume_cm3}
+    else:
+        profile = get_profile(product_profile_id)
     baseline = get_material(baseline_material_id)
     candidate = get_material(candidate_material_id)
     base_props = baseline["analytical"]
@@ -53,7 +67,8 @@ def compare_materials(
     cost_delta = round(candidate_cost - baseline_cost, 2)
 
     assumptions = [
-        f"Identical shell volume of {volume:g} cm³ ({profile['product_type']}).",
+        f"Identical shell volume of {volume:g} cm³ ({profile['product_type']}"
+        + (", user-entered)." if custom_product_type is not None else ")."),
         "Material-only estimate from the shared screening dataset.",
         "Excludes tooling, coatings, labor, yield, assembly, logistics, and supplier negotiation.",
         "Values are hackathon screening inputs, not HP supplier data.",

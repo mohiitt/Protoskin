@@ -41,25 +41,41 @@ bash scripts/download_models.sh
 ## Optional: 3D preview
 
 `visual_engine/reconstruct3d.py` adds a best-effort, orbit-able 3D preview
-reconstructed from the generated 2D concept image, using Stability AI's
-[Stable Fast 3D](https://huggingface.co/stabilityai/stable-fast-3d). This
-is additive on top of the 2D image (which remains the primary, reliable
-output) -- see `third_party/README.md` for the full setup and rationale.
+reconstructed from the generated 2D concept image, using
+[TripoSG](https://github.com/VAST-AI-Research/TripoSG) (MIT). Every
+component on the 3D path is open source -- see `third_party/README.md` for
+the licence audit and the one patch that keeps TripoSG's non-open `diso`
+extractor out. This is additive on top of the 2D image (which remains the
+primary, reliable output).
+
+What it does: background removal (rembg) → TripoSG shape generation
+(512³ surface extraction) → fits the camera the photo was taken from →
+colours the mesh from the photo (hidden sides get the material's real
+colour) → scales it to the product profile's nominal size in mm.
 
 Quick start:
 
 ```bash
-bash scripts/setup_sf3d_env.sh          # one-time: builds the protoskin3d env
-bash scripts/download_models.sh         # say yes when asked about Stable Fast 3D
-bash scripts/run_sf3d_service.sh        # run alongside the main gateway
+bash scripts/setup_3d_env.sh            # one-time: builds the protoskin3d-os env
+bash scripts/download_models.sh         # say yes when asked about TripoSG
+bash scripts/run_3d_service.sh          # run alongside the main gateway
 ```
 
 The main gateway (`gateway_and_ui/backend/main.py`) calls this sidecar
-service over HTTP (`PROTOSKIN_SF3D_SERVICE_URL`, default
+service over HTTP (`PROTOSKIN_3D_SERVICE_URL`, default
 `http://127.0.0.1:8100`) and folds the result into `/api/concept`'s
-response as `reconstruction`. If the service isn't running or reconstruction
-fails, the 2D image and material report still return normally -- the 3D
-viewer just doesn't appear.
+response as `reconstruction`. On an idle ZGX Nano the concept image takes
+~4s and the 3D model ~13s, so a result is back in under 20s; the local-LLM
+explanation is fetched afterwards (`/api/explain`) because running it
+alongside the 3D step slows both -- every model shares the same unified
+memory bandwidth. Requests queue rather than run concurrently for the same
+reason. If the 3D service isn't running or reconstruction fails, the 2D
+image and material report still return normally -- the 3D viewer just
+doesn't appear.
+
+Limits: shape comes from a single image, so a flat, straight-on view gives
+the model little depth to work with -- angled (3/4) views reconstruct
+best. The mm size is nominal (from the product profile), not measured.
 
 ### Who edits what
 

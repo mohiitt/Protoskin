@@ -53,7 +53,7 @@ class ExplanationResult(BaseModel):
 
 class Reconstruction3DResult(BaseModel):
     """Best-effort orbit-able 3D preview, reconstructed from the generated
-    concept image via Stable Fast 3D. Additive and non-blocking: a failure
+    concept image via TripoSG. Additive and non-blocking: a failure
     here never prevents the 2D image + material report from returning
     successfully (mirrors VisualResult's own error-status contract).
     """
@@ -61,13 +61,21 @@ class Reconstruction3DResult(BaseModel):
     glb_path: str | None = None
     glb_url: str | None = None
     reconstruction_time_s: float = 0
+    # [width, depth, height] in mm, scaled so the largest dimension matches
+    # the product profile's nominal size; proportions are model-estimated.
+    dimensions_mm: list[float] | None = None
+    # model-viewer camera-orbit [theta, phi] in degrees: the fitted view the
+    # concept image was taken from, so the viewer opens on that side.
+    view_orbit_deg: list[float] | None = None
     status: Literal["success", "error"] = "success"
     error: str | None = None
 
 
 class ConceptResponse(BaseModel):
     visual: VisualResult
-    materials: MaterialComparison
+    # None for a custom product entered without a shell volume: mass/cost
+    # can't be computed without one, and the numbers are never guessed.
+    materials: MaterialComparison | None
     explanation: ExplanationResult
     reconstruction: Reconstruction3DResult
     disclaimer: str

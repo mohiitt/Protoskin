@@ -20,8 +20,8 @@ DISCLAIMER = (
     "Concept-stage screening estimate. Not a manufacturing quote, "
     "BOM estimate, structural simulation, or thermal validation. "
     "3D preview is a best-effort reconstruction from the 2D concept image, "
-    "not a verified 3D scan or CAD model. 3D preview powered by Stability AI "
-    "(Stable Fast 3D), licensed under the Stability AI Community License."
+    "not a verified 3D scan or CAD model; its size is scaled to the product "
+    "profile's nominal dimensions. 3D shape by TripoSG (MIT licence)."
 )
 
 
